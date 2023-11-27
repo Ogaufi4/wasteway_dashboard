@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  
+    <!-- Add necessary CSS and JS libraries -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Add Firebase SDK -->
+    <script type="module" defer src="https://www.gstatic.com/firebasejs/9.2.0/firebase-app.js"></script>
+    <script  type="module" defer src="https://www.gstatic.com/firebasejs/9.2.0/firebase-database.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<style>
+    /* Add your custom styles here */
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      height: 100vh; /* Full height of the viewport */
+      overflow: hidden; /* Hide overflow to prevent scrolling */
+    }
+
+    #navbar {
+      background-color: #228b2256; /* Tree green navigation bar */
+      overflow: hidden;
+      padding: 20px; /* Added padding to the navigation bar */
+      display: flex;
+      align-items: center; /* Center items vertically */
+      position: sticky;
+      top: 0;
+      z-index: 2; /* Higher z-index for the navbar */
+    }
+
+    #navbar img {
+      height: 40px; /* Adjust the height of the logo as needed */
+    }
+
+   /* #navbar a {
+      color: #f2f2f2;
+      text-decoration: none;
+      padding: 14px 16px;
+      text-align: center;
+      display: block;
+    }*/
+
+    #navbar a:hover {
+      background-color: rgb(112, 241, 37);
+      color: black;
+      border-radius: 20px;
+    }
+
+    #map-container {
+      position: relative;
+      height: 100%;
+    }
+
+    #map {
+      border-radius: 10px; /* Curved borders for the map */
+      width: 100%; /* Full width of the map container */
+      height: 100%; /* Full height of the map container */
+      z-index: 1;/* /* Lower z-index for the map */
+    }
+
+    #legend {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      padding: 20px;
+      background-color: rgba(255, 255, 255, 0.438);
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      z-index: 2; /* Higher z-index for the legend */
+    }
+    .custom-tooltip {
+    background-color: #ffffff;
+    color: #2b2b2b9f;
+    border: 1px solid #999999;
+  }
+
+    .legend-box {
+      display: flex;
+      align-items: center;
+    }
+
+    .legend-box div {
+      width: 20px; /* Adjusted width for the color box */
+      height: 20px; /* Adjusted height for the color box */
+      margin-right: 10px; /* Added margin between color box and text */
+      border-radius: 50%;
+    }
+
+    .legend-box span {
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="navbar">
+    <img src="images/green_bin.png" alt="Logo">
+    
+    <!-- Add more navigation links as needed -->
+  </div>
+
+  <div id="map-container">
+
+    <div id="map"></div>
+
+    <div id="legend">
+      <div class="legend-box">
+        <div style="background-color: red;"></div>
+        <span>100-80%</span>
+      </div>
+      <div class="legend-box">
+        <div style="background-color: green;"></div>
+        <span>79-50%</span>
+      </div>
+      <div class="legend-box">
+        <div style="background-color: blue;"></div>
+        <span>Below 50%</span>
+      </div>
+    </div>
+
+  </div>
+
+<!-- ... Your HTML code ... -->
+
+<script type="module">
+
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.2.0/firebase-app.js';
+   // import { getDatabase } from 'https://www.gstatic.com/firebasejs/9.2.0/firebase-database.js';
+    import { getDatabase, ref, onValue } from 'https://www.gstatic.com/firebasejs/9.2.0/firebase-database.js';
+
+  // Replace with your Firebase config
+  const firebaseConfig = {
+    apiKey: "AIzaSyD9OFMVYLgx1L0QCAGPtt6p10zcgjJFCa4",
+    authDomain: "esp-32database.firebaseapp.com",
+    databaseURL: "https://esp-32database-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "esp-32database",
+    storageBucket: "esp-32database.appspot.com",
+    messagingSenderId: "1050961501138",
+    appId: "1:1050961501138:web:e8f064507388d2138d860b"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+
+  const database = getDatabase(app);
+
+  const sensorsRef = ref(database, 'sensors');
+
+  // Function to determine status based on percentage
+  function getStatus(percentage) {
+    return percentage >= 80 ? 'Full' : 'Not Full';
+  }
+
+
+  const map = L.map('map').setView([-24.6530, 25.9087], 10);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+// Read real-time data from Firebase
+onValue(sensorsRef, (snapshot) => {
+  const sensorData = snapshot.val();
+  console.log('Sensor Data:', sensorData);
+
+  // Clear existing markers
+  map.eachLayer(layer => {
+    if (layer instanceof L.Marker) {
+      map.removeLayer(layer);
+    }
+  });
+
+  // Add new markers based on the updated sensor data
+  for (const key in sensorData) {
+    if (sensorData.hasOwnProperty(key)) {
+      const data = sensorData[key];
+      const percentage = data.percentage;
+      const status = getStatus(percentage);
+
+      let iconImage;
+      if (percentage >= 80) {
+        iconImage = 'images/red_bin.png'; // Red icon for 100-80%
+      } else if (percentage >= 50) {
+        iconImage = 'images/green_bin.png'; // Green icon for 79-50%
+      } else {
+        iconImage = 'images/blue_bin.png'; // Blue icon for below 50%
+      }
+
+      const marker = L.marker([data.location.lat, data.location.lng], {
+        icon: L.icon({ iconUrl: iconImage, iconSize: [40, 40] }),
+      }).addTo(map);
+
+      // Tooltip for each marker
+      marker.bindTooltip(`
+  <b>Location:</b> ${data.location.name}<br>
+  <b>Percentage:</b> ${percentage}%<br>
+  <b>Status:</b> ${status}<br>
+  <b>Last Emptied:</b> ${data.lastEmptied}
+   `,{
+  
+  className: 'custom-tooltip', // Add a custom class for styling
+  direction: 'top' // You can change the direction of the tooltip
+ });
+      
+    }
+  }
+});
+</script>
+
+</body>
+</html>
